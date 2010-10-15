@@ -2,10 +2,6 @@ package com.jogamp.newt.impl.screenmode;
 
 import java.util.HashMap;
 
-/**
- * @author rsantina
- *
- */
 public class ScreensModeState {
 	private static HashMap screenModes = new HashMap();
 	private static Object lock = new Object();

@@ -1,9 +1,5 @@
 package com.jogamp.newt.impl.screenmode;
 
-/**
- * @author rsantina
- *
- */
 public class ScreenMode {
 	private int index;
 	private int width;

@@ -1,10 +1,5 @@
 package com.jogamp.newt.impl.screenmode;
 
-
-/**
- * @author rsantina
- *
- */
 public class ScreenModeController {
 	private String screenFQN = null;
 	private ScreenMode[] screenModes = null;
