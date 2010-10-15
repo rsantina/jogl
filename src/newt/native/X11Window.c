@@ -48,6 +48,10 @@
 #include <X11/keysym.h>
 #include <X11/Xatom.h>
 
+#include<X11/extensions/Xrandr.h>
+
+#include "com_jogamp_newt_impl_x11_X11Screen.h"
+#include "com_jogamp_newt_impl_x11_X11Display.h"
 #include "com_jogamp_newt_impl_x11_X11Window.h"
 
 #include "MouseEvent.h"
@@ -727,6 +731,238 @@ JNIEXPORT jint JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_getHeight0
     Display * dpy = (Display *) (intptr_t) display;
     return (jint) XDisplayHeight( dpy, scrn_idx);
 }
+
+/*
+ * Class:     com_jogamp_newt_impl_x11_X11Screen
+ * Method:    getDesktopScreenModeIndex0
+ * Signature: (JI)I
+ */
+JNIEXPORT jint JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_getDesktopScreenModeIndex0
+  (JNIEnv *env, jobject object, jlong display, jint scrn_idx)
+{
+   Display *dpy = (Display *) (intptr_t) display;
+   Window root = DefaultRootWindow(dpy);
+  
+   // get current resolutions and frequency configuration
+   XRRScreenConfiguration  *conf = XRRGetScreenInfo(dpy, root);
+   short original_rate = XRRConfigCurrentRate(conf);
+   
+   Rotation original_rotation;
+   SizeID original_size_id = XRRConfigCurrentConfiguration(conf, &original_rotation);
+
+   return (jint)original_size_id;   
+}
+
+static void X11Screen_changeScreenMode(Display* dpy, Window root, int screen_indx, XRRScreenSize *xrrs, int screenModeIndex, short freq)
+{
+    int num_rates; //number of available rates for selected mode index
+    short *rates = XRRRates(dpy, screen_indx, screenModeIndex, &num_rates);
+
+    Bool freqSelected = False; //flag if requested frequency is available
+    short selectedFreq = -1;
+    
+    if(freq == -1)
+    {
+        /* user didnt specify a freq
+         * assign first available freq
+         * maybe we should change this to meet curent freq
+	 */
+        selectedFreq = rates[0];
+        freqSelected = True;
+    }
+    else 
+    {
+        int i= 0;
+        while(i < num_rates)
+        {
+            if(rates[i] == freq) 
+	    {
+	      selectedFreq = freq;
+	      freqSelected = True;
+	      break;
+	    }
+            i++;
+        }
+    }
+    if(!freqSelected)
+    {
+        selectedFreq = rates[0];
+        freqSelected = True;  
+    }
+    
+    XRRScreenConfiguration  *conf = XRRGetScreenInfo(dpy, root);
+    
+    // Change the resolution
+    DBG_PRINT("\nCHANGED TO %i x %i PIXELS, %i Hz\n\n", xrrs[screenModeIndex].width, xrrs[screenModeIndex].height, selectedFreq);
+    XRRSetScreenConfigAndRate(dpy, conf, root, screenModeIndex, RR_Rotate_0, selectedFreq, CurrentTime);        
+}
+
+/*
+ * Class:     com_jogamp_newt_impl_x11_X11Screen
+ * Method:    setScreenMode0
+ * Signature: (JIIS)V
+ */
+JNIEXPORT void JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_setScreenMode0
+  (JNIEnv *env, jobject object, jlong display, jint scrn_idx, jint mode_indx, jshort freq)
+{
+    Display *dpy = (Display *) (intptr_t) display;
+    Window root = DefaultRootWindow(dpy);
+
+    int num_sizes;   
+    XRRScreenSize *xrrs = XRRSizes(dpy, (int)scrn_idx, &num_sizes); //get possible screen resolutions
+    int screenModeIndex = (int)mode_indx;
+    
+    if((screenModeIndex > num_sizes) || (screenModeIndex < 0))
+    {
+       DBG_PRINT("\nSelected mode index not available for selected screen, index: %i\n", screenModeIndex);
+       return;
+    }
+   
+   
+    X11Screen_changeScreenMode(dpy, root, (int)scrn_idx, xrrs, screenModeIndex, (short)freq);
+}
+
+#define NUM_SCREEN_MODE_PROPERTIES 3
+
+/*
+ * Class:     com_jogamp_newt_impl_x11_X11Screen
+ * Method:    getScreenMode0
+ * Signature: (JII)[I
+ */
+JNIEXPORT jintArray JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_getScreenMode0
+  (JNIEnv *env, jobject object, jlong display, jint scrn_indx, jint mode_indx)
+{
+    Display *dpy = (Display *) (intptr_t) display;
+    Window root = DefaultRootWindow(dpy);
+    
+    int num_sizes;   
+    XRRScreenSize *xrrs = XRRSizes(dpy, (int)scrn_indx, &num_sizes); //get possible screen resolutions
+
+    int num_rates;
+    short *rates = XRRRates(dpy, (int)scrn_indx, (int)mode_indx, &num_rates);
+ 
+    int prop_size = NUM_SCREEN_MODE_PROPERTIES +num_rates;
+    
+    jintArray properties = (*env)->NewIntArray(env, prop_size);
+    if (properties == NULL) 
+    {
+        return NULL; /* out of memory error thrown */
+    }
+    
+    //Fill the properties in temp jint array
+    int propIndex = 0;
+    jint prop[prop_size];
+    
+    prop[propIndex++] = (int)mode_indx; 
+    prop[propIndex++] = xrrs[(int)mode_indx].width; 
+    prop[propIndex++] = xrrs[(int)mode_indx].height;
+    
+    //loop through all possible resolutions
+    //with the selectable display frequencies
+    int i= 0;
+    while(i < num_rates)
+    {
+        prop[propIndex++] = rates[i];
+        i++;
+    }   
+    
+
+    // move from the temp structure to the java structure
+    (*env)->SetIntArrayRegion(env, properties, 0, prop_size, prop);
+
+    return properties;
+}
+
+/*
+ * Class:     com_jogamp_newt_impl_x11_X11Screen
+ * Method:    getNumScreenModes0
+ * Signature: (JI)I
+ */
+JNIEXPORT jint JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_getNumScreenModes0
+  (JNIEnv *env, jobject object, jlong display, jint scrn_indx)
+{
+    Display *dpy = (Display *) (intptr_t) display;
+    Window root = DefaultRootWindow(dpy);
+    
+    int num_sizes;   
+    XRRScreenSize *xrrs = XRRSizes(dpy, (int)scrn_indx, &num_sizes); //get possible screen resolutions
+
+    return num_sizes;
+}
+
+
+/*
+ * Class:     com_jogamp_newt_impl_x11_X11Screen
+ * Method:    getCurrentScreenRate0
+ * Signature: (JI)S
+ */
+JNIEXPORT jshort JNICALL Java_com_jogamp_newt_impl_x11_X11Screen_getCurrentScreenRate0
+  (JNIEnv *env, jobject object, jlong display, jint scrn_idx) 
+{
+    Display *dpy = (Display *) (intptr_t) display;
+    Window root = DefaultRootWindow(dpy);
+    
+    // get current resolutions and frequencies
+    XRRScreenConfiguration  *conf = XRRGetScreenInfo(dpy, root);
+    short original_rate = XRRConfigCurrentRate(conf);
+    
+    return original_rate;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////
+static void X11Screen_setScreenModeTest
+    (jlong display, jint screen_index, jint width, jint height, jint orient, jshort freq)
+{
+    
+    short possible_frequencies[64][64];
+  
+    Display *dpy = (Display *) (intptr_t) display;
+    Window root = DefaultRootWindow(dpy);
+
+    int num_sizes;   
+    XRRScreenSize *xrrs = XRRSizes(dpy, 0, &num_sizes); //get possible screen resolutions
+
+    //loop through all possible resolutions
+    //with the selectable display frequencies
+    int i = 0;
+    while(i < num_sizes) 
+    {
+        int num_rates;
+//      printf("\n\t%2i : %4i x %4i   (%4imm x%4imm ) ", i, xrrs[i].width, xrrs[i].height, xrrs[i].mwidth, xrrs[i].mheight);
+        short *rates = XRRRates(dpy, 0, i, &num_rates);
+
+        int j= 0;
+        while(j < num_rates)
+        {
+            possible_frequencies[i][j] = rates[j];
+            printf("%4i ", rates[j]);
+            j ++;
+        } 
+        i++;
+    }
+    
+    // get current resolutions and frequencies
+    XRRScreenConfiguration  *conf = XRRGetScreenInfo(dpy, root);
+    short original_rate = XRRConfigCurrentRate(conf);
+    
+    Rotation original_rotation;
+    SizeID original_size_id = XRRConfigCurrentConfiguration(conf, &original_rotation);
+
+    printf("\n\tCURRENT SIZE ID  : %i\n", original_size_id);
+    printf("\tCURRENT ROTATION : %i \n", original_rotation);
+    printf("\tCURRENT RATE     : %i Hz\n\n", original_rate);
+
+    // CHANGE RESOLUTION
+//     printf("\tCHANGED TO %i x %i PIXELS, %i Hz\n\n", xrrs[1].width, xrrs[1].height, possible_frequencies[1][0]);
+  //  XRRSetScreenConfigAndRate(dpy, conf, root, 1, RR_Rotate_0, possible_frequencies[1][0], CurrentTime);
+
+    // SLEEP A WHILE
+    //usleep(6000000);
+    // RESTORE ORIGINAL CONFIGURATION
+//     printf("\tRESTORING %i x %i PIXELS, %i Hz\n\n", xrrs[original_size_id].width, xrrs[original_size_id].height, original_rate);
+    //XRRSetScreenConfigAndRate(dpy, conf, root, original_size_id, original_rotation, original_rate, CurrentTime);
+}
+
 
 
 /**

@@ -221,7 +221,7 @@ public interface Window extends NativeWindow {
     boolean setFullscreen(boolean fullscreen);
     
     boolean isFullscreen();
-
+    
     /**
      * Sets the location of the top left corner of the window, including
      * decorations (so the client area will be placed at

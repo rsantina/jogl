@@ -142,7 +142,7 @@ public class X11Window extends WindowImpl {
     private        native void setPosition0(long parentWindowHandle, long display, long windowHandle, int x, int y);
     private        native void reparentWindow0(long parentWindowHandle, long display, int screen_index, long windowHandle, 
                                                int x, int y, boolean undecorated, boolean isVisible);
-
+    
     private void windowCreated(long windowHandle) {
         setWindowHandle(windowHandle);
     }

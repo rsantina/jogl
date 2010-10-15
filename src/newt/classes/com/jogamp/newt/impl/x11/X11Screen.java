@@ -33,8 +33,13 @@
 
 package com.jogamp.newt.impl.x11;
 
+import java.nio.IntBuffer;
+
 import com.jogamp.newt.*;
 import com.jogamp.newt.impl.ScreenImpl;
+import com.jogamp.newt.impl.screenmode.ScreenMode;
+import com.jogamp.newt.impl.screenmode.ScreenModeController;
+
 import javax.media.nativewindow.x11.*;
 
 public class X11Screen extends ScreenImpl {
@@ -58,7 +63,56 @@ public class X11Screen extends ScreenImpl {
     }
 
     protected void closeNativeImpl() { }
-
+    
+    public int getDesktopScreenModeIndex() {
+    	return getDesktopScreenModeIndex0(display.getHandle(), idx);
+    }
+    
+    public void setScreenMode(int modeIndex, short rate) {
+    	setScreenMode0(display.getHandle(), idx, modeIndex, rate);
+    	
+    	//update screen mode state
+    	ScreenModeController screenModeControler = super.screensModeState.getScreenModeController(getScreenFQN());
+    	screenModeControler.setCurrentScreenMode(modeIndex);
+    	screenModeControler.setCurrentScreenRate(rate);
+    }
+    
+    protected short getCurrentScreenRate() {
+    	return getCurrentScreenRate0(display.getHandle(), idx);
+	}
+    
+    protected ScreenMode[] getScreenModes(){
+    	int numModes = getNumScreenModes0(display.getHandle(), idx);
+    	
+    	ScreenMode[] screenModes = new ScreenMode[numModes];
+    	for(int i=0; i< numModes; i++){
+    		screenModes[i] = getScreenMode(i);
+    	}
+    	return screenModes;
+    }
+    
+    private ScreenMode getScreenMode(int modeIndex){
+    	int[] modeProp = getScreenMode0(display.getHandle(), idx, modeIndex);
+    	
+    	if(modeProp == null){
+    		return null;
+    	}
+    	int propIndex = 0;
+    	int index = modeProp[propIndex++];
+    	int width = modeProp[propIndex++];
+    	int height = modeProp[propIndex++];
+    	
+    	ScreenMode screenMode = new ScreenMode(index, width, height);
+    	
+    	short[] rates = new short[modeProp.length - propIndex];
+    	for(int i= propIndex; i < modeProp.length; i++)
+    	{
+    		rates[i-propIndex] = (short) modeProp[i];
+    	}
+    	screenMode.setRates(rates);
+    	return screenMode;
+    }
+    
     //----------------------------------------------------------------------
     // Internals only
     //
@@ -66,5 +120,14 @@ public class X11Screen extends ScreenImpl {
     private native long GetScreen0(long dpy, int scrn_idx);
     private native int  getWidth0(long display, int scrn_idx);
     private native int  getHeight0(long display, int scrn_idx);
+
+    private native int getDesktopScreenModeIndex0(long display, int screen_index);
+    private native short getCurrentScreenRate0(long display, int screen_index);
+    
+    private native void setScreenMode0(long display, int screen_index, int mode_index, short freq);
+    
+    private native int[] getScreenMode0(long display, int screen_index, int mode_index);
+    private native int getNumScreenModes0(long display, int screen_index);
+
 }
 

@@ -35,13 +35,30 @@
 package com.jogamp.newt.impl;
 
 import com.jogamp.newt.*;
+import com.jogamp.newt.impl.screenmode.ScreenMode;
+import com.jogamp.newt.impl.screenmode.ScreenModeController;
+import com.jogamp.newt.impl.screenmode.ScreensModeState;
 
 import javax.media.nativewindow.*;
+
+import sun.security.x509.AVA;
+
 import java.security.*;
 
 public abstract class ScreenImpl implements Screen {
-
-    private static Class getScreenClass(String type) 
+    protected DisplayImpl display;
+    protected int idx;
+    protected AbstractGraphicsScreen aScreen;
+    protected int refCount; // number of Screen references by Window
+    protected int width=-1, height=-1; // detected values: set using setScreenSize
+    protected static int usrWidth=-1, usrHeight=-1; // property values: newt.ws.swidth and newt.ws.sheight
+    private static AccessControlContext localACC = AccessController.getContext();
+    
+    
+	protected static ScreensModeState screensModeState = new ScreensModeState(); // hold all screen mode controllers
+	private String screenFQN = null; // string fully qualified name
+	
+	private static Class getScreenClass(String type) 
         throws ClassNotFoundException 
     {
         Class screenClass = NewtFactory.getCustomClass(type, "Screen");
@@ -76,6 +93,7 @@ public abstract class ScreenImpl implements Screen {
             ScreenImpl screen  = (ScreenImpl) screenClass.newInstance();
             screen.display = (DisplayImpl) display;
             screen.idx = idx;
+            
             return screen;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -96,9 +114,27 @@ public abstract class ScreenImpl implements Screen {
                 System.err.println("Screen.createNative() END ("+DisplayImpl.getThreadName()+", "+this+")");
             }
         }
+        
+        //retrieve screen modes and current rate
+        ScreenMode[] screenModes = getScreenModes();
+        String screenFQN = display.getFQName()+idx;
+        setScreenFQN(screenFQN);
+        ScreenModeController screenModeControler = new ScreenModeController(screenFQN , 
+        		getDesktopScreenModeIndex(), getCurrentScreenRate());
+        screenModeControler.setScreenModes(screenModes);
+        
+        screensModeState.setScreenModeController(screenModeControler);
     }
 
     public synchronized final void destroy() {
+    	ScreenModeController screenModeControler = screensModeState.getScreenModeController(getScreenFQN());
+    	/**Revert the screen mode and rate 
+    	 * to original state of creation
+    	 */
+    	if(!screenModeControler.isOriginalMode()) {
+    		setScreenMode(screenModeControler.getOriginalScreenMode(), screenModeControler.getOriginalScreenRate());
+    	}
+    	
         if ( null != aScreen ) {
             closeNativeImpl();
             aScreen = null;
@@ -144,6 +180,45 @@ public abstract class ScreenImpl implements Screen {
 
     protected abstract void createNativeImpl();
     protected abstract void closeNativeImpl();
+    
+    /**
+     * Get the Current Desktop Screen mode index
+     * returns -1 if functionality not implemented
+     * for screen platform
+     */
+    protected int getDesktopScreenModeIndex() {
+    	return -1;
+    }
+    
+    /** 
+     * Get list of available screen modes
+     * null if not implemented for screen platform
+     */
+    protected ScreenMode[] getScreenModes(){
+    	return null;
+    }
+    
+    public void setScreenMode(int modeIndex, short rate) {
+    }
+
+    /** Get the current screen rate
+     *  returns -1 if not natively implemented
+     */
+    protected short getCurrentScreenRate() {
+    	return -1;
+	}
+
+    public ScreensModeState getScreensModeState() {
+		return screensModeState;
+	}
+    
+    public String getScreenFQN() {
+		return screenFQN;
+	}
+
+	private void setScreenFQN(String screenFQN) {
+		this.screenFQN = screenFQN;
+	}
 
     protected void setScreenSize(int w, int h) {
         System.err.println("Detected screen size "+w+"x"+h);
@@ -177,13 +252,5 @@ public abstract class ScreenImpl implements Screen {
     public String toString() {
         return "NEWT-Screen[idx "+idx+", refCount "+refCount+", "+getWidth()+"x"+getHeight()+", "+aScreen+", "+display+"]";
     }
-
-    protected DisplayImpl display;
-    protected int idx;
-    protected AbstractGraphicsScreen aScreen;
-    protected int refCount; // number of Screen references by Window
-    protected int width=-1, height=-1; // detected values: set using setScreenSize
-    protected static int usrWidth=-1, usrHeight=-1; // property values: newt.ws.swidth and newt.ws.sheight
-    private static AccessControlContext localACC = AccessController.getContext();
 }
 

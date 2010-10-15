@@ -287,6 +287,8 @@ public abstract class WindowImpl implements Window, NEWTEventConsumer
     protected abstract void reconfigureWindowImpl(int x, int y, int width, int height);
 
     protected void setTitleImpl(String title) {}
+    
+   
 
     //----------------------------------------------------------------------
     // NativeSurface
@@ -1170,7 +1172,7 @@ public abstract class WindowImpl implements Window, NEWTEventConsumer
         }
         return this.fullscreen;
     }
-
+    
     //----------------------------------------------------------------------
     // Child Window Management
     // 
