@@ -1,6 +1,6 @@
 //Copyright 2010 JogAmp Community. All rights reserved.
-
-#include uniforms.glsl
+#include precision.glsl
+#include uniforms-vp.glsl
 #include attributes.glsl
 #include varyings.glsl
 
